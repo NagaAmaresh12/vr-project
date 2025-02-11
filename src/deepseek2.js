@@ -2,24 +2,20 @@ import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-let scene, camera, renderer, controller;
-let model = null;
-const controllerState = {
-  buttonPressed: false,
-  targetRotation: new THREE.Quaternion(),
-  targetPosition: new THREE.Vector3(0, 1.3, -1),
-  lastClickTime: 0,
-};
-const rotationStep = Math.PI / 12; // 15 degrees rotation
-const cubicBezierEase = (t) => t * t * (3 - 2 * t);
+let scene, camera, renderer, controller, model;
+let buttonPressed = false;
+let targetRotationY = 0; // Track rotation target
+let longPressActive = false;
 
 init();
 animate();
 
 function init() {
+  // Scene Setup
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x202020);
 
+  // Camera Setup
   camera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -28,31 +24,36 @@ function init() {
   );
   camera.position.set(0, 1.5, 2);
 
+  // Renderer Setup
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.xr.enabled = true;
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
 
+  // Light Setup
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
   directionalLight.position.set(5, 10, 5);
+  directionalLight.castShadow = true;
   scene.add(directionalLight);
 
+  // Load 3D Model
   const loader = new GLTFLoader();
   loader.load(
     "/models/refined_eagle.glb",
     (gltf) => {
       model = gltf.scene;
-      model.position.copy(controllerState.targetPosition);
+      model.position.set(0, 1.3, -1);
       scene.add(model);
     },
     undefined,
-    (error) => console.error("Model loading error:", error)
+    (error) => console.error("Error loading model:", error)
   );
 
+  // VR Controller Setup
   controller = renderer.xr.getController(0);
   if (controller) {
     controller.addEventListener("selectstart", onButtonPress);
@@ -64,62 +65,46 @@ function init() {
 }
 
 function onButtonPress() {
-  controllerState.buttonPressed = true;
+  buttonPressed = true;
+  const headDirection = getHeadDirection();
+
+  if (Math.abs(headDirection) > 0.2) {
+    // 90-degree rotation per click
+    targetRotationY += (Math.sign(headDirection) * Math.PI) / 2;
+    longPressActive = false;
+  } else {
+    longPressActive = true; // Enable continuous rotation if head is moving slightly
+  }
 }
 
 function onButtonRelease() {
-  controllerState.buttonPressed = false;
+  buttonPressed = false;
+  longPressActive = false;
 }
 
-function rotateModel() {
-  if (!model || !controllerState.buttonPressed) return;
-
+function getHeadDirection() {
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
-
-  let newRotation = model.quaternion.clone();
-  let localUp = new THREE.Vector3(0, 1, 0);
-  let localRight = new THREE.Vector3(1, 0, 0);
-
-  model.updateMatrixWorld();
-  localUp.applyQuaternion(model.quaternion);
-  localRight.applyQuaternion(model.quaternion);
-
-  if (Math.abs(direction.x) > 0.1) {
-    const yRotation = new THREE.Quaternion().setFromAxisAngle(
-      localUp,
-      -rotationStep * Math.sign(direction.x)
-    );
-    newRotation.multiply(yRotation);
-  }
-
-  if (Math.abs(direction.y) > 0.1) {
-    const xRotation = new THREE.Quaternion().setFromAxisAngle(
-      localRight,
-      rotationStep * Math.sign(direction.y)
-    );
-    newRotation.multiply(xRotation);
-  }
-
-  controllerState.targetRotation.copy(newRotation);
+  return direction.x; // Get left/right head movement
 }
 
-function smoothMove() {
-  if (model) {
-    model.quaternion.slerp(controllerState.targetRotation, 0.08);
-  }
+function animate() {
+  renderer.setAnimationLoop(() => {
+    if (model) {
+      // Smooth transition to 90-degree increments
+      model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
+
+      // Continuous rotation on long press
+      if (buttonPressed && longPressActive) {
+        model.rotation.y += getHeadDirection() * 0.05;
+      }
+    }
+    renderer.render(scene, camera);
+  });
 }
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function animate() {
-  renderer.setAnimationLoop(() => {
-    rotateModel();
-    smoothMove();
-    renderer.render(scene, camera);
-  });
 }
