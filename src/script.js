@@ -7,18 +7,16 @@ let model,
   buttonPressed = false;
 let gazeTimer = null;
 const gazeThreshold = 2000; // 2 seconds
-const rotationAmount = Math.PI / 2; // 90 degrees
-let lastRotation = { x: 0, y: 0 }; // Track previous rotations
+const rotationSpeed = 0.05; // Smooth rotation speed
+let targetRotation = { x: 0, y: 0 };
 
 init();
 animate();
 
 function init() {
-  // Scene Setup
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x202020);
 
-  // Camera Setup
   camera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -27,14 +25,12 @@ function init() {
   );
   camera.position.set(0, 1.5, 2);
 
-  // Renderer Setup
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.xr.enabled = true;
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
 
-  // Lights
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambientLight);
 
@@ -43,7 +39,6 @@ function init() {
   directionalLight.castShadow = true;
   scene.add(directionalLight);
 
-  // Load 3D Model
   const loader = new GLTFLoader();
   loader.load("/models/refined_eagle.glb", (gltf) => {
     model = gltf.scene;
@@ -51,7 +46,6 @@ function init() {
     scene.add(model);
   });
 
-  // VR Controller (Single Button)
   controller = renderer.xr.getController(0);
   if (controller) {
     controller.addEventListener("selectstart", onButtonPress);
@@ -59,13 +53,10 @@ function init() {
     scene.add(controller);
   }
 
-  // Add Pointer UI
   addPointer();
-
   window.addEventListener("resize", onWindowResize);
 }
 
-// VR Button Interaction (Scale Model)
 function onButtonPress() {
   if (model) {
     buttonPressed = !buttonPressed;
@@ -81,14 +72,12 @@ function onButtonRelease() {
   console.log("Button Released");
 }
 
-// Window Resize Handling
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Add Pointer UI
 function addPointer() {
   const pointerGeometry = new THREE.RingGeometry(0.02, 0.03, 32);
   const pointerMaterial = new THREE.MeshBasicMaterial({
@@ -96,12 +85,11 @@ function addPointer() {
     side: THREE.DoubleSide,
   });
   const pointer = new THREE.Mesh(pointerGeometry, pointerMaterial);
-  pointer.position.set(0, 0, -1); // Place in front of camera
+  pointer.position.set(0, 0, -1);
   camera.add(pointer);
   scene.add(camera);
 }
 
-// Handle Gaze Rotation
 function checkGazeDirection() {
   if (!model) return;
 
@@ -116,46 +104,36 @@ function checkGazeDirection() {
   let rotateUp = gazeY > 0.5;
   let rotateDown = gazeY < -0.5;
 
-  if (rotateLeft && lastRotation.y !== -rotationAmount) {
-    triggerRotation("left");
-  } else if (rotateRight && lastRotation.y !== rotationAmount) {
-    triggerRotation("right");
-  } else if (rotateUp && lastRotation.x !== -rotationAmount) {
-    triggerRotation("up");
-  } else if (rotateDown && lastRotation.x !== rotationAmount) {
-    triggerRotation("down");
-  } else {
-    clearTimeout(gazeTimer);
-    gazeTimer = null;
+  if (rotateLeft) {
+    targetRotation.y -= Math.PI / 2;
+  } else if (rotateRight) {
+    targetRotation.y += Math.PI / 2;
+  } else if (rotateUp) {
+    targetRotation.x -= Math.PI / 2;
+  } else if (rotateDown) {
+    targetRotation.x += Math.PI / 2;
   }
 }
 
-function triggerRotation(direction) {
-  if (gazeTimer) return;
-
-  gazeTimer = setTimeout(() => {
-    if (direction === "left") {
-      model.rotation.y -= rotationAmount;
-      lastRotation.y -= rotationAmount;
-    } else if (direction === "right") {
-      model.rotation.y += rotationAmount;
-      lastRotation.y += rotationAmount;
-    } else if (direction === "up") {
-      model.rotation.x -= rotationAmount;
-      lastRotation.x -= rotationAmount;
-    } else if (direction === "down") {
-      model.rotation.x += rotationAmount;
-      lastRotation.x += rotationAmount;
-    }
-
-    gazeTimer = null;
-  }, gazeThreshold);
+function smoothRotate() {
+  if (model) {
+    model.rotation.y = THREE.MathUtils.lerp(
+      model.rotation.y,
+      targetRotation.y,
+      rotationSpeed
+    );
+    model.rotation.x = THREE.MathUtils.lerp(
+      model.rotation.x,
+      targetRotation.x,
+      rotationSpeed
+    );
+  }
 }
 
-// Animation Loop
 function animate() {
   renderer.setAnimationLoop(() => {
-    checkGazeDirection(); // Continuously check gaze
+    checkGazeDirection();
+    smoothRotate();
     renderer.render(scene, camera);
   });
 }
