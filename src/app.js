@@ -7,15 +7,15 @@ let model,
   buttonPressed = false;
 let targetRotation = { x: 0, y: 0 };
 let targetPosition = { z: -1 };
-let isRotating = false,
-  isMoving = false;
+let isMoving = false;
 let longPressInterval = null;
 let doubleClickTimer = null,
   clickCount = 0;
 const rotationSpeed = 0.05;
 const moveSpeed = 0.02;
-const rotationStep = Math.PI / 2;
-const moveStep = 0.3;
+const moveStep = 0.03;
+const moveLimit = { min: -2, max: -0.5 };
+let moveDirection = 1;
 const cubicBezierEase = (t) => t * t * (3 - 2 * t);
 let pointer;
 
@@ -51,7 +51,6 @@ function init() {
   const loader = new GLTFLoader();
   loader.load("/models/refined_eagle.glb", (gltf) => {
     model = gltf.scene;
-    model.position.set(0, 1.3, -1);
     scene.add(model);
   });
 
@@ -78,49 +77,37 @@ function onButtonPress() {
   if (clickCount === 1) {
     doubleClickTimer = setTimeout(() => (clickCount = 0), 300);
   } else if (clickCount === 2) {
-    resetObject();
+    placeObject();
     clickCount = 0;
-  }
-
-  const direction = new THREE.Vector3();
-  camera.getWorldDirection(direction);
-
-  if (Math.abs(direction.x) > 0.4) {
-    startRotation(direction.x < 0 ? "left" : "right");
-  } else if (Math.abs(direction.y) > 0.4) {
-    startRotation(direction.y > 0 ? "up" : "down");
   } else {
     startMovement();
   }
 }
 
 function onButtonRelease() {
-  stopRotation();
   stopMovement();
 }
 
-function startRotation(direction) {
-  if (longPressInterval) clearInterval(longPressInterval);
-  isRotating = true;
-  longPressInterval = setInterval(() => {
-    if (direction === "left") targetRotation.y -= rotationStep;
-    else if (direction === "right") targetRotation.y += rotationStep;
-    else if (direction === "up") targetRotation.x -= rotationStep;
-    else if (direction === "down") targetRotation.x += rotationStep;
-  }, 300);
-}
-
-function stopRotation() {
-  isRotating = false;
-  clearInterval(longPressInterval);
+function placeObject() {
+  if (!model) return;
+  const worldPosition = new THREE.Vector3();
+  pointer.getWorldPosition(worldPosition);
+  model.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
+  targetPosition.z = model.position.z;
 }
 
 function startMovement() {
   if (longPressInterval) clearInterval(longPressInterval);
   isMoving = true;
   longPressInterval = setInterval(() => {
-    targetPosition.z += moveStep;
-  }, 300);
+    targetPosition.z += moveStep * moveDirection;
+    if (
+      targetPosition.z >= moveLimit.max ||
+      targetPosition.z <= moveLimit.min
+    ) {
+      moveDirection *= -1;
+    }
+  }, 100);
 }
 
 function stopMovement() {
@@ -128,30 +115,10 @@ function stopMovement() {
   clearInterval(longPressInterval);
 }
 
-function resetObject() {
-  targetRotation = { x: 0, y: 0 };
-  targetPosition = { z: -1 };
-}
-
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function smoothRotate() {
-  if (model) {
-    model.rotation.x = THREE.MathUtils.lerp(
-      model.rotation.x,
-      targetRotation.x,
-      cubicBezierEase(rotationSpeed)
-    );
-    model.rotation.y = THREE.MathUtils.lerp(
-      model.rotation.y,
-      targetRotation.y,
-      cubicBezierEase(rotationSpeed)
-    );
-  }
 }
 
 function smoothMove() {
@@ -166,7 +133,6 @@ function smoothMove() {
 
 function animate() {
   renderer.setAnimationLoop(() => {
-    smoothRotate();
     smoothMove();
     renderer.render(scene, camera);
   });
