@@ -5,33 +5,16 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 let scene, camera, renderer, controller;
 let model = null;
 const controllerState = {
-  longPressThreshold: 500,
-  pressStartTime: 0,
-  clickCount: 0,
-  clickTimeout: null,
   isRotating: false,
-  initialModelRotation: new THREE.Euler(),
-  initialCameraRotation: new THREE.Euler(),
-  targetRotation: { x: 0, y: 0 },
-  zoomState: "out",
-  transitions: {
-    rotation: {
-      active: false,
-      start: new THREE.Euler(),
-      duration: 1000,
-      startTime: 0,
-    },
-    position: {
-      active: false,
-      start: 0,
-      target: -1,
-      duration: 1000,
-      startTime: 0,
-    },
-  },
+  isZooming: false,
+  rotationAxis: new THREE.Vector3(),
+  zoomDirection: 1,
+  lastClickTime: 0,
+  rotationAngle: 0,
 };
 
-const rotationSpeed = 0.02;
+const rotationStep = Math.PI / 2; // 90 degrees
+const zoomSpeed = 0.05;
 const zoomLimits = { min: -2, max: -0.5 };
 const cubicBezierEase = (t) => t * t * (3 - 2 * t);
 
@@ -56,180 +39,102 @@ function init() {
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
 
-  // Lighting setup
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambientLight);
+
   const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
   directionalLight.position.set(5, 10, 5);
+  directionalLight.castShadow = true;
   scene.add(directionalLight);
 
-  // Load model
-  new GLTFLoader().load(
+  const loader = new GLTFLoader();
+  loader.load(
     "/models/refined_eagle.glb",
     (gltf) => {
       model = gltf.scene;
+      model.position.set(0, 1.3, -1); // Initial position
+      model.rotation.set(0, 0, 0); // Start in correct orientation
       scene.add(model);
-      controllerState.initialModelRotation.copy(model.rotation);
-      controllerState.targetRotation.y = model.rotation.y;
-      controllerState.targetRotation.x = model.rotation.x;
     },
     undefined,
     (error) => console.error("Model loading error:", error)
   );
 
-  // Controller setup
   controller = renderer.xr.getController(0);
-  controller.addEventListener("selectstart", onSelectStart);
-  controller.addEventListener("selectend", onSelectEnd);
-  scene.add(controller);
+  if (controller) {
+    controller.addEventListener("selectstart", onButtonPress);
+    controller.addEventListener("selectend", onButtonRelease);
+    scene.add(controller);
+  }
 
   window.addEventListener("resize", onWindowResize);
 }
 
-function onSelectStart() {
-  controllerState.pressStartTime = performance.now();
-  controllerState.longPressTimeout = setTimeout(
-    startRotation,
-    controllerState.longPressThreshold
-  );
-}
+function onButtonPress() {
+  const now = performance.now();
+  const timeSinceLastClick = now - controllerState.lastClickTime;
+  controllerState.lastClickTime = now;
 
-function onSelectEnd() {
-  const pressDuration = performance.now() - controllerState.pressStartTime;
-  clearTimeout(controllerState.longPressTimeout);
-
-  if (pressDuration < controllerState.longPressThreshold) {
-    handleClick();
+  if (timeSinceLastClick < 300) {
+    resetModelOrientation();
   } else {
-    stopRotation();
+    detectRotationDirection();
+    controllerState.isRotating = true;
   }
 }
 
-function handleClick() {
-  controllerState.clickCount++;
-
-  if (controllerState.clickCount === 1) {
-    controllerState.clickTimeout = setTimeout(() => {
-      toggleZoom();
-      controllerState.clickCount = 0;
-    }, 300);
-  } else {
-    clearTimeout(controllerState.clickTimeout);
-    resetOrientation();
-    controllerState.clickCount = 0;
-  }
-}
-
-function startRotation() {
-  if (!model) return;
-  controllerState.isRotating = true;
-  controllerState.initialModelRotation.copy(model.rotation);
-  controllerState.initialCameraRotation.setFromQuaternion(camera.quaternion);
-  startRotationTransition();
-}
-
-function stopRotation() {
+function onButtonRelease() {
   controllerState.isRotating = false;
 }
 
-function startRotationTransition() {
-  controllerState.transitions.rotation.active = true;
-  controllerState.transitions.rotation.start.copy(model.rotation);
-  controllerState.transitions.rotation.startTime = performance.now();
+function detectRotationDirection() {
+  if (!model || !controller) return;
+
+  const headDirection = new THREE.Vector3();
+  camera.getWorldDirection(headDirection);
+
+  if (Math.abs(headDirection.x) > Math.abs(headDirection.y)) {
+    // Rotate left or right
+    controllerState.rotationAxis.set(0, 1, 0);
+    controllerState.rotationAngle =
+      headDirection.x > 0 ? -rotationStep : rotationStep;
+  } else {
+    // Rotate up or down
+    controllerState.rotationAxis.set(1, 0, 0);
+    controllerState.rotationAngle =
+      headDirection.y > 0 ? -rotationStep : rotationStep;
+  }
 }
 
-function toggleZoom() {
-  const newZ =
-    controllerState.zoomState === "out" ? zoomLimits.min : zoomLimits.max;
-  controllerState.zoomState =
-    controllerState.zoomState === "out" ? "in" : "out";
-  startPositionTransition(newZ);
-}
-
-function resetOrientation() {
+function resetModelOrientation() {
   if (!model) return;
-  controllerState.targetRotation.x = controllerState.initialModelRotation.x;
-  controllerState.targetRotation.y = controllerState.initialModelRotation.y;
-  startRotationTransition();
-  startPositionTransition(-1);
+  model.rotation.set(0, 0, 0);
 }
 
-function startPositionTransition(targetZ) {
-  controllerState.transitions.position.active = true;
-  controllerState.transitions.position.start = model.position.z;
-  controllerState.transitions.position.target = targetZ;
-  controllerState.transitions.position.startTime = performance.now();
+function zoomModel() {
+  if (!model) return;
+  model.position.z = THREE.MathUtils.clamp(
+    model.position.z + zoomSpeed * controllerState.zoomDirection,
+    zoomLimits.min,
+    zoomLimits.max
+  );
 }
 
-function updateTransitions() {
-  // Handle rotation transition
-  if (controllerState.transitions.rotation.active) {
-    const elapsed =
-      performance.now() - controllerState.transitions.rotation.startTime;
-    const t = Math.min(
-      elapsed / controllerState.transitions.rotation.duration,
-      1
-    );
+function animate() {
+  renderer.setAnimationLoop(() => {
+    if (controllerState.isRotating && model) {
+      model.rotateOnAxis(
+        controllerState.rotationAxis,
+        cubicBezierEase(rotationStep)
+      );
+    }
 
-    model.rotation.x = THREE.MathUtils.lerp(
-      controllerState.transitions.rotation.start.x,
-      controllerState.targetRotation.x,
-      cubicBezierEase(t)
-    );
-
-    model.rotation.y = THREE.MathUtils.lerp(
-      controllerState.transitions.rotation.start.y,
-      controllerState.targetRotation.y,
-      cubicBezierEase(t)
-    );
-
-    if (t === 1) controllerState.transitions.rotation.active = false;
-  }
-
-  // Handle position transition
-  if (controllerState.transitions.position.active) {
-    const elapsed =
-      performance.now() - controllerState.transitions.position.startTime;
-    const t = Math.min(
-      elapsed / controllerState.transitions.position.duration,
-      1
-    );
-
-    model.position.z = THREE.MathUtils.lerp(
-      controllerState.transitions.position.start,
-      controllerState.transitions.position.target,
-      cubicBezierEase(t)
-    );
-
-    if (t === 1) controllerState.transitions.position.active = false;
-  }
+    renderer.render(scene, camera);
+  });
 }
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function animate() {
-  renderer.setAnimationLoop(() => {
-    if (controllerState.isRotating && model) {
-      const currentCameraRotation = new THREE.Euler().setFromQuaternion(
-        camera.quaternion
-      );
-      const deltaY =
-        currentCameraRotation.y - controllerState.initialCameraRotation.y;
-      const deltaX =
-        currentCameraRotation.x - controllerState.initialCameraRotation.x;
-
-      controllerState.targetRotation.y =
-        controllerState.initialModelRotation.y + deltaY * 2;
-      controllerState.targetRotation.x =
-        controllerState.initialModelRotation.x + deltaX * 2;
-      startRotationTransition();
-    }
-
-    updateTransitions();
-    renderer.render(scene, camera);
-  });
 }
