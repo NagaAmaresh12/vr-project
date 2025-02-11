@@ -36,6 +36,7 @@ function init() {
     (gltf) => {
       model = gltf.scene;
       model.position.set(0, 1.3, -1); // Start centered and slightly away
+      model.quaternion.identity(); // Ensure no initial rotation
       scene.add(model);
     },
     undefined,
@@ -60,8 +61,13 @@ function onButtonPress() {
   camera.getWorldDirection(direction);
 
   const targetRotation = new THREE.Euler();
+
   targetRotation.y = Math.atan2(direction.x, direction.z);
-  targetRotation.x = -Math.asin(direction.y);
+  targetRotation.x = THREE.MathUtils.clamp(
+    -Math.asin(direction.y),
+    -Math.PI / 6,
+    Math.PI / 6
+  ); // Limit tilt to avoid extreme rotation
 
   rotationTarget.setFromEuler(targetRotation);
 }
