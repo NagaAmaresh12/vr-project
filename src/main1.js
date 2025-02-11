@@ -3,8 +3,9 @@ import { VRButton } from "three/addons/webxr/VRButton.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 let scene, camera, renderer, controller, model;
-let isRotating = false;
-const rotationTarget = new THREE.Quaternion();
+let rotationTarget = new THREE.Quaternion();
+let lastDirection = new THREE.Vector3();
+let modelInitialized = false;
 
 init();
 animate();
@@ -36,8 +37,9 @@ function init() {
     (gltf) => {
       model = gltf.scene;
       model.position.set(0, 1.3, -1); // Start centered and slightly away
-      model.quaternion.identity(); // Ensure no initial rotation
+      model.quaternion.identity(); // Start with no rotation
       scene.add(model);
+      modelInitialized = true;
     },
     undefined,
     (error) => console.error("Model loading error:", error)
@@ -45,35 +47,32 @@ function init() {
 
   controller = renderer.xr.getController(0);
   if (controller) {
-    controller.addEventListener("selectstart", onButtonPress);
-    controller.addEventListener("selectend", onButtonRelease);
+    controller.addEventListener("selectstart", onHeadMovement);
     scene.add(controller);
   }
 
   window.addEventListener("resize", onWindowResize);
 }
 
-function onButtonPress() {
-  if (!model) return;
-  isRotating = true;
+function onHeadMovement() {
+  if (!model || !modelInitialized) return;
 
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
 
-  const targetRotation = new THREE.Euler();
+  // Ignore forward/backward movement (Z-axis)
+  if (Math.abs(direction.z - lastDirection.z) < 0.05) return;
 
-  targetRotation.y = Math.atan2(direction.x, direction.z);
+  const targetRotation = new THREE.Euler();
+  targetRotation.y = Math.atan2(direction.x, direction.z); // Rotate left/right
   targetRotation.x = THREE.MathUtils.clamp(
     -Math.asin(direction.y),
     -Math.PI / 6,
     Math.PI / 6
-  ); // Limit tilt to avoid extreme rotation
+  ); // Rotate up/down with limits
 
   rotationTarget.setFromEuler(targetRotation);
-}
-
-function onButtonRelease() {
-  isRotating = false;
+  lastDirection.copy(direction);
 }
 
 function onWindowResize() {
@@ -84,8 +83,8 @@ function onWindowResize() {
 
 function animate() {
   renderer.setAnimationLoop(() => {
-    if (model && isRotating) {
-      model.quaternion.slerp(rotationTarget, 0.08); // Smooth rotation with easing
+    if (model) {
+      model.quaternion.slerp(rotationTarget, 0.08); // Smooth rotation
     }
     renderer.render(scene, camera);
   });
