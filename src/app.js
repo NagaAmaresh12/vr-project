@@ -104,13 +104,23 @@ function startMovement() {
   if (controllerState.longPressInterval)
     clearInterval(controllerState.longPressInterval);
   controllerState.isMoving = true;
+
   controllerState.longPressInterval = setInterval(() => {
+    // Move forward and backward
     controllerState.targetPosition.z += moveStep * moveDirection;
     if (
       controllerState.targetPosition.z >= moveLimit.max ||
       controllerState.targetPosition.z <= moveLimit.min
     ) {
       moveDirection *= -1;
+    }
+
+    // Rotate the object based on head movement
+    if (model && controller) {
+      const direction = new THREE.Vector3();
+      controller.getWorldDirection(direction);
+      model.rotation.y += rotationSpeed * direction.x;
+      model.rotation.x += rotationSpeed * direction.y;
     }
   }, 100);
 }
