@@ -5,17 +5,18 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 let scene, camera, renderer, controller;
 let model = null;
 const controllerState = {
-  buttonPressed: false,
-  targetRotation: new THREE.Quaternion(),
-  targetPosition: new THREE.Vector3(0, 1.3, -1),
-  isMoving: false,
+  isRotating: false,
+  isZooming: false,
+  rotationAxis: new THREE.Vector3(),
+  zoomDirection: 1,
   lastClickTime: 0,
+  rotationAngle: 0,
 };
-const rotationStep = Math.PI / 2; // 90 degrees rotation
-const moveStep = 0.3;
-const moveLimit = { min: -2, max: -0.5 };
+
+const rotationStep = Math.PI / 2; // 90 degrees
+const zoomSpeed = 0.05;
+const zoomLimits = { min: -2, max: -0.5 };
 const cubicBezierEase = (t) => t * t * (3 - 2 * t);
-let moveDirection = 1;
 
 init();
 animate();
@@ -41,8 +42,9 @@ function init() {
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
   directionalLight.position.set(5, 10, 5);
+  directionalLight.castShadow = true;
   scene.add(directionalLight);
 
   const loader = new GLTFLoader();
@@ -50,7 +52,8 @@ function init() {
     "/models/refined_eagle.glb",
     (gltf) => {
       model = gltf.scene;
-      model.position.copy(controllerState.targetPosition);
+      model.position.set(0, 1.3, -1); // Initial position
+      model.rotation.set(0, 0, 0); // Start in correct orientation
       scene.add(model);
     },
     undefined,
@@ -69,102 +72,69 @@ function init() {
 
 function onButtonPress() {
   const now = performance.now();
-  if (now - controllerState.lastClickTime < 300) {
-    resetModel();
-  } else {
-    controllerState.buttonPressed = true;
-    detectRotationOrZoom();
-  }
+  const timeSinceLastClick = now - controllerState.lastClickTime;
   controllerState.lastClickTime = now;
+
+  if (timeSinceLastClick < 300) {
+    resetModelOrientation();
+  } else {
+    detectRotationDirection();
+    controllerState.isRotating = true;
+  }
 }
 
 function onButtonRelease() {
-  controllerState.buttonPressed = false;
+  controllerState.isRotating = false;
 }
 
-function detectRotationOrZoom() {
+function detectRotationDirection() {
   if (!model || !controller) return;
 
-  const direction = new THREE.Vector3();
-  camera.getWorldDirection(direction);
+  const headDirection = new THREE.Vector3();
+  camera.getWorldDirection(headDirection);
 
-  if (controllerState.buttonPressed) {
-    // Head movement controls rotation
-    if (Math.abs(direction.x) > 0.2) {
-      rotateModel(direction.x > 0 ? "right" : "left");
-    } else if (Math.abs(direction.y) > 0.2) {
-      rotateModel(direction.y > 0 ? "down" : "up");
-    }
+  if (Math.abs(headDirection.x) > Math.abs(headDirection.y)) {
+    // Rotate left or right
+    controllerState.rotationAxis.set(0, 1, 0);
+    controllerState.rotationAngle =
+      headDirection.x > 0 ? -rotationStep : rotationStep;
   } else {
-    // Single Click - Zoom in/out
-    zoomModel();
+    // Rotate up or down
+    controllerState.rotationAxis.set(1, 0, 0);
+    controllerState.rotationAngle =
+      headDirection.y > 0 ? -rotationStep : rotationStep;
   }
 }
 
-function rotateModel(direction) {
+function resetModelOrientation() {
   if (!model) return;
-
-  let newRotation = model.quaternion.clone();
-  let rotationAxis = new THREE.Vector3();
-
-  switch (direction) {
-    case "left":
-      rotationAxis.set(0, 1, 0);
-      break;
-    case "right":
-      rotationAxis.set(0, -1, 0);
-      break;
-    case "up":
-      rotationAxis.set(1, 0, 0);
-      break;
-    case "down":
-      rotationAxis.set(-1, 0, 0);
-      break;
-  }
-
-  const quaternion = new THREE.Quaternion().setFromAxisAngle(
-    rotationAxis,
-    rotationStep
-  );
-  newRotation.multiply(quaternion);
-  controllerState.targetRotation.copy(newRotation);
+  model.rotation.set(0, 0, 0);
 }
 
 function zoomModel() {
   if (!model) return;
-
-  controllerState.targetPosition.z += moveStep * moveDirection;
-  if (
-    controllerState.targetPosition.z >= moveLimit.max ||
-    controllerState.targetPosition.z <= moveLimit.min
-  ) {
-    moveDirection *= -1;
-  }
+  model.position.z = THREE.MathUtils.clamp(
+    model.position.z + zoomSpeed * controllerState.zoomDirection,
+    zoomLimits.min,
+    zoomLimits.max
+  );
 }
 
-function resetModel() {
-  if (!model) return;
+function animate() {
+  renderer.setAnimationLoop(() => {
+    if (controllerState.isRotating && model) {
+      model.rotateOnAxis(
+        controllerState.rotationAxis,
+        cubicBezierEase(rotationStep)
+      );
+    }
 
-  model.quaternion.identity();
-  controllerState.targetPosition.set(0, 1.3, -1);
-}
-
-function smoothMove() {
-  if (model) {
-    model.quaternion.slerp(controllerState.targetRotation, 0.08);
-    model.position.lerp(controllerState.targetPosition, cubicBezierEase(0.05));
-  }
+    renderer.render(scene, camera);
+  });
 }
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function animate() {
-  renderer.setAnimationLoop(() => {
-    smoothMove();
-    renderer.render(scene, camera);
-  });
 }
