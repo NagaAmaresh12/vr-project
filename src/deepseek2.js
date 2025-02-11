@@ -16,8 +16,7 @@ const moveStep = 0.3;
 const moveLimit = { min: -2, max: -0.5 };
 const cubicBezierEase = (t) => t * t * (3 - 2 * t);
 let moveDirection = 1;
-let zoomFactor = 0.2; // Zoom step size
-let pointer = new THREE.Vector3();
+let zoomLevel = 1;
 
 init();
 animate();
@@ -75,7 +74,7 @@ function onButtonPress() {
     resetModel();
   } else {
     controllerState.buttonPressed = true;
-    detectInteraction();
+    detectRotationOrZoom();
   }
   controllerState.lastClickTime = now;
 }
@@ -84,26 +83,20 @@ function onButtonRelease() {
   controllerState.buttonPressed = false;
 }
 
-function detectInteraction() {
+function detectRotationOrZoom() {
   if (!model || !controller) return;
 
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
-  controller.getWorldPosition(pointer);
 
-  const modelPosition = new THREE.Vector3();
-  model.getWorldPosition(modelPosition);
-
-  const distance = pointer.distanceTo(modelPosition);
-
-  if (distance < 1) {
-    zoomModel();
-  } else {
+  if (controllerState.buttonPressed) {
     if (Math.abs(direction.x) > 0.2) {
       rotateModel(direction.x > 0 ? "right" : "left");
     } else if (Math.abs(direction.y) > 0.2) {
       rotateModel(direction.y > 0 ? "down" : "up");
     }
+  } else {
+    zoomModel();
   }
 }
 
@@ -139,10 +132,8 @@ function rotateModel(direction) {
 function zoomModel() {
   if (!model) return;
 
-  let newZ = controllerState.targetPosition.z + zoomFactor * moveDirection;
-  if (newZ <= moveLimit.max && newZ >= moveLimit.min) {
-    controllerState.targetPosition.z = newZ;
-  }
+  zoomLevel = zoomLevel === 1 ? 1.5 : 1; // Toggle zoom level
+  model.scale.set(zoomLevel, zoomLevel, zoomLevel);
 }
 
 function resetModel() {
@@ -150,6 +141,8 @@ function resetModel() {
 
   model.quaternion.identity();
   controllerState.targetPosition.set(0, 1.3, -1);
+  zoomLevel = 1;
+  model.scale.set(1, 1, 1);
 }
 
 function smoothMove() {
