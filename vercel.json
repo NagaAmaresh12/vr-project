@@ -1,7 +1,7 @@
 {
     "rewrites": [
       { "source": "/models/:path*", "destination": "/public/models/:path*" }
-    ],
-    "routes": [{ "src": "/(.*)", "dest": "/index.html" }]
+    ]
+
   }
   
