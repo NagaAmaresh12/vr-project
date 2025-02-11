@@ -8,14 +8,10 @@ const controllerState = {
   buttonPressed: false,
   targetRotation: new THREE.Quaternion(),
   targetPosition: new THREE.Vector3(0, 1.3, -1),
-  isMoving: false,
   lastClickTime: 0,
 };
-const rotationStep = Math.PI / 2; // 90 degrees rotation
-const moveStep = 0.3;
-const moveLimit = { min: -2, max: -0.5 };
+const rotationStep = Math.PI / 12; // 15 degrees rotation
 const cubicBezierEase = (t) => t * t * (3 - 2 * t);
-let moveDirection = 1;
 
 init();
 animate();
@@ -68,91 +64,43 @@ function init() {
 }
 
 function onButtonPress() {
-  const now = performance.now();
-  if (now - controllerState.lastClickTime < 300) {
-    resetModel();
-  } else {
-    controllerState.buttonPressed = true;
-    detectRotationOrZoom();
-  }
-  controllerState.lastClickTime = now;
+  controllerState.buttonPressed = true;
 }
 
 function onButtonRelease() {
   controllerState.buttonPressed = false;
 }
 
-function detectRotationOrZoom() {
-  if (!model || !controller) return;
+function rotateModel() {
+  if (!model || !controllerState.buttonPressed) return;
 
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
 
-  if (controllerState.buttonPressed) {
-    // Head movement controls rotation
-    if (Math.abs(direction.x) > 0.2) {
-      rotateModel(direction.x > 0 ? "right" : "left");
-    } else if (Math.abs(direction.y) > 0.2) {
-      rotateModel(direction.y > 0 ? "down" : "up");
-    }
-  } else {
-    // Single Click - Zoom in/out
-    zoomModel();
-  }
-}
-
-function rotateModel(direction) {
-  if (!model) return;
-
   let newRotation = model.quaternion.clone();
-  let rotationAxis = new THREE.Vector3();
 
-  switch (direction) {
-    case "left":
-      rotationAxis.set(0, 1, 0);
-      break;
-    case "right":
-      rotationAxis.set(0, -1, 0);
-      break;
-    case "up":
-      rotationAxis.set(1, 0, 0);
-      break;
-    case "down":
-      rotationAxis.set(-1, 0, 0);
-      break;
+  if (Math.abs(direction.x) > 0.1) {
+    const yRotation = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      -rotationStep * Math.sign(direction.x)
+    );
+    newRotation.multiply(yRotation);
   }
 
-  const quaternion = new THREE.Quaternion().setFromAxisAngle(
-    rotationAxis,
-    rotationStep
-  );
-  newRotation.multiply(quaternion);
+  if (Math.abs(direction.y) > 0.1) {
+    const xRotation = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
+      rotationStep * Math.sign(direction.y)
+    );
+    newRotation.multiply(xRotation);
+  }
+
   controllerState.targetRotation.copy(newRotation);
-}
-
-function zoomModel() {
-  if (!model) return;
-
-  controllerState.targetPosition.z += moveStep * moveDirection;
-  if (
-    controllerState.targetPosition.z >= moveLimit.max ||
-    controllerState.targetPosition.z <= moveLimit.min
-  ) {
-    moveDirection *= -1;
-  }
-}
-
-function resetModel() {
-  if (!model) return;
-
-  model.quaternion.identity();
-  controllerState.targetPosition.set(0, 1.3, -1);
 }
 
 function smoothMove() {
   if (model) {
     model.quaternion.slerp(controllerState.targetRotation, 0.08);
-    model.position.lerp(controllerState.targetPosition, cubicBezierEase(0.05));
   }
 }
 
@@ -164,40 +112,8 @@ function onWindowResize() {
 
 function animate() {
   renderer.setAnimationLoop(() => {
+    rotateModel();
     smoothMove();
     renderer.render(scene, camera);
   });
-}
-
-function rotateModel(direction) {
-  if (!model) return;
-
-  let rotationAxis = new THREE.Vector3();
-  let quaternion = new THREE.Quaternion();
-
-  switch (direction) {
-    case "left":
-      rotationAxis.set(0, 1, 0); // Rotate around Y-axis (yaw)
-      quaternion.setFromAxisAngle(rotationAxis, rotationStep);
-      model.quaternion.multiply(quaternion);
-      break;
-
-    case "right":
-      rotationAxis.set(0, -1, 0); // Rotate around Y-axis (yaw)
-      quaternion.setFromAxisAngle(rotationAxis, rotationStep);
-      model.quaternion.multiply(quaternion);
-      break;
-
-    case "up":
-      rotationAxis.set(1, 0, 0); // Rotate around X-axis (pitch)
-      quaternion.setFromAxisAngle(rotationAxis, rotationStep);
-      model.quaternion.multiply(quaternion);
-      break;
-
-    case "down":
-      rotationAxis.set(-1, 0, 0); // Rotate around X-axis (pitch)
-      quaternion.setFromAxisAngle(rotationAxis, rotationStep);
-      model.quaternion.multiply(quaternion);
-      break;
-  }
 }
