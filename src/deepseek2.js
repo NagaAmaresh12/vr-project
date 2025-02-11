@@ -4,8 +4,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 let scene, camera, renderer, controller, model;
 let buttonPressed = false;
-let targetRotationY = 0; // Track rotation target
+let targetRotationY = 0; // Left-right rotation
+let targetRotationX = 0; // Up-down rotation
 let longPressActive = false;
+let activeRotation = null; // Track active rotation direction ('horizontal' or 'vertical')
 
 init();
 animate();
@@ -66,37 +68,59 @@ function init() {
 
 function onButtonPress() {
   buttonPressed = true;
-  const headDirection = getHeadDirection();
+  const headDirectionX = getHeadDirectionX(); // Left-right movement
+  const headDirectionY = getHeadDirectionY(); // Up-down movement
 
-  if (Math.abs(headDirection) > 0.2) {
-    // 90-degree rotation per click
-    targetRotationY += (Math.sign(headDirection) * Math.PI) / 2;
+  if (Math.abs(headDirectionX) > 0.2 && !activeRotation) {
+    // If moving left/right and no active rotation, set horizontal rotation
+    targetRotationY += Math.sign(headDirectionX) * (Math.PI / 2);
+    activeRotation = "horizontal";
+    longPressActive = false;
+  } else if (Math.abs(headDirectionY) > 0.2 && !activeRotation) {
+    // If moving up/down and no active rotation, set vertical rotation
+    targetRotationX += Math.sign(headDirectionY) * (Math.PI / 2);
+    activeRotation = "vertical";
     longPressActive = false;
   } else {
-    longPressActive = true; // Enable continuous rotation if head is moving slightly
+    longPressActive = true;
   }
 }
 
 function onButtonRelease() {
   buttonPressed = false;
   longPressActive = false;
+  activeRotation = null; // Reset active rotation after button release
 }
 
-function getHeadDirection() {
+function getHeadDirectionX() {
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
-  return direction.x; // Get left/right head movement
+  return direction.x; // Left-right movement
+}
+
+function getHeadDirectionY() {
+  const direction = new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  return direction.y; // Up-down movement
 }
 
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
       // Smooth transition to 90-degree increments
-      model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
+      if (activeRotation === "horizontal") {
+        model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
+      } else if (activeRotation === "vertical") {
+        model.rotation.x += (targetRotationX - model.rotation.x) * 0.1;
+      }
 
       // Continuous rotation on long press
       if (buttonPressed && longPressActive) {
-        model.rotation.y += getHeadDirection() * 0.05;
+        if (activeRotation === "horizontal") {
+          model.rotation.y += getHeadDirectionX() * 0.05;
+        } else if (activeRotation === "vertical") {
+          model.rotation.x += getHeadDirectionY() * 0.05;
+        }
       }
     }
     renderer.render(scene, camera);
