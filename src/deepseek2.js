@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-let scene, camera, renderer, controller, pointer;
+let scene, camera, renderer, controller;
 let model = null;
 const controllerState = {
   buttonPressed: false,
@@ -16,6 +16,8 @@ const moveStep = 0.3;
 const moveLimit = { min: -2, max: -0.5 };
 const cubicBezierEase = (t) => t * t * (3 - 2 * t);
 let moveDirection = 1;
+let zoomFactor = 0.2; // Zoom step size
+let pointer = new THREE.Vector3();
 
 init();
 animate();
@@ -64,12 +66,6 @@ function init() {
     scene.add(controller);
   }
 
-  pointer = new THREE.Mesh(
-    new THREE.SphereGeometry(0.01, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0xff0000 })
-  );
-  scene.add(pointer);
-
   window.addEventListener("resize", onWindowResize);
 }
 
@@ -91,27 +87,61 @@ function onButtonRelease() {
 function detectInteraction() {
   if (!model || !controller) return;
 
-  const raycaster = new THREE.Raycaster();
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
-  raycaster.set(controller.position, direction);
+  controller.getWorldPosition(pointer);
 
-  const intersects = raycaster.intersectObject(model, true);
+  const modelPosition = new THREE.Vector3();
+  model.getWorldPosition(modelPosition);
 
-  if (intersects.length > 0) {
+  const distance = pointer.distanceTo(modelPosition);
+
+  if (distance < 1) {
     zoomModel();
+  } else {
+    if (Math.abs(direction.x) > 0.2) {
+      rotateModel(direction.x > 0 ? "right" : "left");
+    } else if (Math.abs(direction.y) > 0.2) {
+      rotateModel(direction.y > 0 ? "down" : "up");
+    }
   }
+}
+
+function rotateModel(direction) {
+  if (!model) return;
+
+  let newRotation = model.quaternion.clone();
+  let rotationAxis = new THREE.Vector3();
+
+  switch (direction) {
+    case "left":
+      rotationAxis.set(0, 1, 0);
+      break;
+    case "right":
+      rotationAxis.set(0, -1, 0);
+      break;
+    case "up":
+      rotationAxis.set(1, 0, 0);
+      break;
+    case "down":
+      rotationAxis.set(-1, 0, 0);
+      break;
+  }
+
+  const quaternion = new THREE.Quaternion().setFromAxisAngle(
+    rotationAxis,
+    rotationStep
+  );
+  newRotation.multiply(quaternion);
+  controllerState.targetRotation.copy(newRotation);
 }
 
 function zoomModel() {
   if (!model) return;
 
-  controllerState.targetPosition.z += moveStep * moveDirection;
-  if (
-    controllerState.targetPosition.z >= moveLimit.max ||
-    controllerState.targetPosition.z <= moveLimit.min
-  ) {
-    moveDirection *= -1;
+  let newZ = controllerState.targetPosition.z + zoomFactor * moveDirection;
+  if (newZ <= moveLimit.max && newZ >= moveLimit.min) {
+    controllerState.targetPosition.z = newZ;
   }
 }
 
@@ -127,16 +157,6 @@ function smoothMove() {
     model.quaternion.slerp(controllerState.targetRotation, 0.08);
     model.position.lerp(controllerState.targetPosition, cubicBezierEase(0.05));
   }
-
-  updatePointer();
-}
-
-function updatePointer() {
-  if (!controller || !pointer) return;
-
-  const direction = new THREE.Vector3();
-  controller.getWorldDirection(direction);
-  pointer.position.copy(controller.position).add(direction.multiplyScalar(0.1));
 }
 
 function onWindowResize() {
@@ -151,4 +171,3 @@ function animate() {
     renderer.render(scene, camera);
   });
 }
-//je;;
