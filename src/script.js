@@ -3,12 +3,17 @@ import { VRButton } from "three/addons/webxr/VRButton.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 let scene, camera, renderer, controller;
-let model,
-  buttonPressed = false;
-let gazeTimer = null;
-const gazeThreshold = 2000; // 2 seconds
-const rotationSpeed = 0.05; // Smooth rotation speed
-let targetRotation = { x: 0, y: 0 };
+let model = null;
+const controllerState = {
+  buttonPressed: false,
+  targetPosition: { z: -1 },
+  isMoving: false,
+  longPressInterval: null,
+  lastClickTime: 0,
+};
+const moveStep = 0.03;
+const moveLimit = { min: -2, max: -0.5 };
+let moveDirection = 1;
 
 init();
 animate();
@@ -31,20 +36,20 @@ function init() {
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  scene.add(ambientLight);
-
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
-  directionalLight.position.set(5, 10, 5);
-  directionalLight.castShadow = true;
-  scene.add(directionalLight);
+  const light = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(light);
 
   const loader = new GLTFLoader();
-  loader.load("/models/refined_eagle.glb", (gltf) => {
-    model = gltf.scene;
-    model.position.set(0, 1.3, -1);
-    scene.add(model);
-  });
+  loader.load(
+    "/models/refined_eagle.glb",
+    (gltf) => {
+      model = gltf.scene;
+      scene.add(model);
+      resetObjectRotation(); // Ensure initial direction is straight
+    },
+    undefined,
+    (error) => console.error("Model loading error:", error)
+  );
 
   controller = renderer.xr.getController(0);
   if (controller) {
@@ -53,23 +58,71 @@ function init() {
     scene.add(controller);
   }
 
-  addPointer();
   window.addEventListener("resize", onWindowResize);
 }
 
 function onButtonPress() {
-  if (model) {
-    buttonPressed = !buttonPressed;
-    model.scale.set(
-      buttonPressed ? 1.5 : 1,
-      buttonPressed ? 1.5 : 1,
-      buttonPressed ? 1.5 : 1
-    );
+  const now = performance.now();
+  if (now - controllerState.lastClickTime < 300) {
+    placeObject(); // Double click: Move instantly where looking
+  } else {
+    startMovement(); // Long press: Move back and forth
   }
+  controllerState.lastClickTime = now;
 }
 
 function onButtonRelease() {
-  console.log("Button Released");
+  stopMovement();
+}
+
+// ✅ **Double Click: Place Object Instantly**
+function placeObject() {
+  if (!model) return;
+  const worldPosition = new THREE.Vector3();
+  controller.getWorldPosition(worldPosition);
+  model.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
+
+  // Reset rotation to make object straight in front
+  resetObjectRotation();
+  controllerState.targetPosition.z = model.position.z;
+}
+
+// ✅ **Long Press: Move and Rotate Dynamically**
+function startMovement() {
+  if (controllerState.longPressInterval)
+    clearInterval(controllerState.longPressInterval);
+  controllerState.isMoving = true;
+
+  controllerState.longPressInterval = setInterval(() => {
+    controllerState.targetPosition.z += moveStep * moveDirection;
+    if (
+      controllerState.targetPosition.z >= moveLimit.max ||
+      controllerState.targetPosition.z <= moveLimit.min
+    ) {
+      moveDirection *= -1; // Change direction at limits
+    }
+
+    // Rotate object **only when user moves head**
+    if (model && controller) {
+      const direction = new THREE.Vector3();
+      controller.getWorldDirection(direction);
+
+      model.rotation.y = Math.atan2(direction.x, direction.z); // Rotate based on head direction
+      model.rotation.x = 0; // Keep upright
+    }
+  }, 100);
+}
+
+function stopMovement() {
+  controllerState.isMoving = false;
+  clearInterval(controllerState.longPressInterval);
+}
+
+// ✅ **Helper: Reset Object Rotation to Face Forward**
+function resetObjectRotation() {
+  if (model) {
+    model.rotation.set(0, 0, 0); // Reset to default
+  }
 }
 
 function onWindowResize() {
@@ -78,62 +131,19 @@ function onWindowResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function addPointer() {
-  const pointerGeometry = new THREE.RingGeometry(0.02, 0.03, 32);
-  const pointerMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    side: THREE.DoubleSide,
-  });
-  const pointer = new THREE.Mesh(pointerGeometry, pointerMaterial);
-  pointer.position.set(0, 0, -1);
-  camera.add(pointer);
-  scene.add(camera);
-}
-
-function checkGazeDirection() {
-  if (!model) return;
-
-  const direction = new THREE.Vector3();
-  camera.getWorldDirection(direction);
-
-  const gazeX = direction.x;
-  const gazeY = direction.y;
-
-  let rotateLeft = gazeX < -0.5;
-  let rotateRight = gazeX > 0.5;
-  let rotateUp = gazeY > 0.5;
-  let rotateDown = gazeY < -0.5;
-
-  if (rotateLeft) {
-    targetRotation.y -= Math.PI / 2;
-  } else if (rotateRight) {
-    targetRotation.y += Math.PI / 2;
-  } else if (rotateUp) {
-    targetRotation.x -= Math.PI / 2;
-  } else if (rotateDown) {
-    targetRotation.x += Math.PI / 2;
-  }
-}
-
-function smoothRotate() {
+function smoothMove() {
   if (model) {
-    model.rotation.y = THREE.MathUtils.lerp(
-      model.rotation.y,
-      targetRotation.y,
-      rotationSpeed
-    );
-    model.rotation.x = THREE.MathUtils.lerp(
-      model.rotation.x,
-      targetRotation.x,
-      rotationSpeed
+    model.position.z = THREE.MathUtils.lerp(
+      model.position.z,
+      controllerState.targetPosition.z,
+      0.1
     );
   }
 }
 
 function animate() {
   renderer.setAnimationLoop(() => {
-    checkGazeDirection();
-    smoothRotate();
+    smoothMove();
     renderer.render(scene, camera);
   });
 }
