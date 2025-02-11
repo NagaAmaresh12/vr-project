@@ -78,10 +78,16 @@ function rotateModel() {
   camera.getWorldDirection(direction);
 
   let newRotation = model.quaternion.clone();
+  let localUp = new THREE.Vector3(0, 1, 0);
+  let localRight = new THREE.Vector3(1, 0, 0);
+
+  model.updateMatrixWorld();
+  localUp.applyQuaternion(model.quaternion);
+  localRight.applyQuaternion(model.quaternion);
 
   if (Math.abs(direction.x) > 0.1) {
     const yRotation = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(0, 1, 0),
+      localUp,
       -rotationStep * Math.sign(direction.x)
     );
     newRotation.multiply(yRotation);
@@ -89,7 +95,7 @@ function rotateModel() {
 
   if (Math.abs(direction.y) > 0.1) {
     const xRotation = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0),
+      localRight,
       rotationStep * Math.sign(direction.y)
     );
     newRotation.multiply(xRotation);
