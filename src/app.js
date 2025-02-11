@@ -3,14 +3,15 @@ import { VRButton } from "three/addons/webxr/VRButton.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 let scene, camera, renderer, controller;
-let model,
-  buttonPressed = false;
-let targetRotation = { x: 0, y: 0 };
-let targetPosition = { z: -1 };
-let isMoving = false;
-let longPressInterval = null;
-let doubleClickTimer = null,
-  clickCount = 0;
+let model = null;
+const controllerState = {
+  buttonPressed: false,
+  targetRotation: { x: 0, y: 0 },
+  targetPosition: { z: -1 },
+  isMoving: false,
+  longPressInterval: null,
+  lastClickTime: 0,
+};
 const rotationSpeed = 0.05;
 const moveSpeed = 0.02;
 const moveStep = 0.03;
@@ -49,10 +50,15 @@ function init() {
   scene.add(directionalLight);
 
   const loader = new GLTFLoader();
-  loader.load("/models/refined_eagle.glb", (gltf) => {
-    model = gltf.scene;
-    scene.add(model);
-  });
+  loader.load(
+    encodeURI("/models/refined_eagle.glb"),
+    (gltf) => {
+      model = gltf.scene;
+      scene.add(model);
+    },
+    undefined,
+    (error) => console.error("Model loading error:", error)
+  );
 
   controller = renderer.xr.getController(0);
   if (controller) {
@@ -73,15 +79,13 @@ function init() {
 }
 
 function onButtonPress() {
-  clickCount++;
-  if (clickCount === 1) {
-    doubleClickTimer = setTimeout(() => (clickCount = 0), 300);
-  } else if (clickCount === 2) {
+  const now = performance.now();
+  if (now - controllerState.lastClickTime < 300) {
     placeObject();
-    clickCount = 0;
   } else {
     startMovement();
   }
+  controllerState.lastClickTime = now;
 }
 
 function onButtonRelease() {
@@ -93,17 +97,18 @@ function placeObject() {
   const worldPosition = new THREE.Vector3();
   pointer.getWorldPosition(worldPosition);
   model.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
-  targetPosition.z = model.position.z;
+  controllerState.targetPosition.z = model.position.z;
 }
 
 function startMovement() {
-  if (longPressInterval) clearInterval(longPressInterval);
-  isMoving = true;
-  longPressInterval = setInterval(() => {
-    targetPosition.z += moveStep * moveDirection;
+  if (controllerState.longPressInterval)
+    clearInterval(controllerState.longPressInterval);
+  controllerState.isMoving = true;
+  controllerState.longPressInterval = setInterval(() => {
+    controllerState.targetPosition.z += moveStep * moveDirection;
     if (
-      targetPosition.z >= moveLimit.max ||
-      targetPosition.z <= moveLimit.min
+      controllerState.targetPosition.z >= moveLimit.max ||
+      controllerState.targetPosition.z <= moveLimit.min
     ) {
       moveDirection *= -1;
     }
@@ -111,8 +116,8 @@ function startMovement() {
 }
 
 function stopMovement() {
-  isMoving = false;
-  clearInterval(longPressInterval);
+  controllerState.isMoving = false;
+  clearInterval(controllerState.longPressInterval);
 }
 
 function onWindowResize() {
@@ -125,7 +130,7 @@ function smoothMove() {
   if (model) {
     model.position.z = THREE.MathUtils.lerp(
       model.position.z,
-      targetPosition.z,
+      controllerState.targetPosition.z,
       cubicBezierEase(moveSpeed)
     );
   }
