@@ -78,11 +78,22 @@ function onButtonRelease() {
 // ✅ **Double Click: Place Object Instantly**
 function placeObject() {
   if (!model) return;
+
   const worldPosition = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+
+  // Get controller position and direction
   controller.getWorldPosition(worldPosition);
+  controller.getWorldDirection(direction);
+
+  // Set a fixed distance from the user
+  const fixedDistance = 1.5; // Adjust as needed
+  worldPosition.addScaledVector(direction, fixedDistance);
+
+  // Place object at the computed position
   model.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
 
-  // Reset rotation to make object straight in front
+  // Reset rotation to make the object face forward
   resetObjectRotation();
   controllerState.targetPosition.z = model.position.z;
 }
