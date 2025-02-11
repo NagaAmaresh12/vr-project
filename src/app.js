@@ -17,6 +17,7 @@ const moveSpeed = 0.02;
 const rotationStep = Math.PI / 2;
 const moveStep = 0.3;
 const cubicBezierEase = (t) => t * t * (3 - 2 * t);
+let pointer;
 
 init();
 animate();
@@ -60,6 +61,14 @@ function init() {
     controller.addEventListener("selectend", onButtonRelease);
     scene.add(controller);
   }
+
+  // Add pointer in center
+  const geometry = new THREE.CircleGeometry(0.01, 32);
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  pointer = new THREE.Mesh(geometry, material);
+  pointer.position.set(0, 0, -0.5);
+  camera.add(pointer);
+  scene.add(camera);
 
   window.addEventListener("resize", onWindowResize);
 }
