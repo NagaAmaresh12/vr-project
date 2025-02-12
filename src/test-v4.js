@@ -5,8 +5,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 let scene, camera, renderer, controller, model, reticle;
 let lastClickTime = 0;
 let isPlacingModel = false;
-let activeRotation = null;
-let targetRotation = { x: 0, y: 0 };
+let targetRotation = new THREE.Quaternion();
+const rotationSpeed = 0.15;
 
 init();
 animate();
@@ -61,7 +61,9 @@ function loadModel(path) {
     (gltf) => {
       model = gltf.scene;
       model.position.set(0, 1.3, -1);
+      model.rotation.set(0, 0, 0);
       scene.add(model);
+      targetRotation.copy(model.quaternion);
     },
     undefined,
     (error) => console.error("Error loading model:", error)
@@ -71,7 +73,7 @@ function loadModel(path) {
 function setupController() {
   controller = renderer.xr.getController(0);
   controller.addEventListener("selectstart", onButtonPress);
-  controller.addEventListener("selectend", onButtonRelease);
+  controller.addEventListener("selectend", () => (isPlacingModel = false));
   scene.add(controller);
 }
 
@@ -91,7 +93,7 @@ function onButtonPress() {
   if (now - lastClickTime < 300) {
     placeModel();
   } else {
-    determineRotation();
+    updateRotation();
   }
   lastClickTime = now;
 }
@@ -104,7 +106,6 @@ function placeModel() {
   model.lookAt(camera.position);
   model.rotation.set(0, 0, 0);
   isPlacingModel = true;
-  activeRotation = null;
 }
 
 function resetModelPosition() {
@@ -112,35 +113,25 @@ function resetModelPosition() {
   placeModel();
 }
 
-function determineRotation() {
+function updateRotation() {
   if (!model || isPlacingModel) return;
 
   const cameraQuaternion = camera.quaternion;
-  const euler = new THREE.Euler();
-  euler.setFromQuaternion(cameraQuaternion, "YXZ");
+  const euler = new THREE.Euler().setFromQuaternion(cameraQuaternion, "YXZ");
 
-  const yaw = euler.y;
-  const pitch = euler.x;
+  let yaw = euler.y;
+  let pitch = THREE.MathUtils.clamp(euler.x, -Math.PI / 4, Math.PI / 4); // Prevent flipping
 
-  if (!activeRotation) {
-    targetRotation.y += Math.sign(yaw) * (Math.PI / 4); // Adjust rotation smoothly
-    targetRotation.x += Math.sign(pitch) * (Math.PI / 4);
-    activeRotation = "rotating";
-  }
-}
-
-function onButtonRelease() {
-  activeRotation = null;
-  isPlacingModel = false;
+  const newRotation = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(pitch, yaw, 0, "YXZ")
+  );
+  targetRotation.copy(newRotation);
 }
 
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
-      if (!isPlacingModel) {
-        model.rotation.y += (targetRotation.y - model.rotation.y) * 0.15;
-        model.rotation.x += (targetRotation.x - model.rotation.x) * 0.15;
-      }
+      model.quaternion.slerp(targetRotation, rotationSpeed);
     }
     renderer.render(scene, camera);
   });
