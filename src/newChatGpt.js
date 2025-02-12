@@ -6,9 +6,8 @@ let scene, camera, renderer, controller, model, reticle;
 let buttonPressed = false;
 let targetRotationY = 0;
 let targetRotationX = 0;
-let longPressActive = false;
-let activeRotation = null;
 let lastClickTime = 0;
+let activeRotation = null;
 
 init();
 animate();
@@ -31,35 +30,22 @@ function init() {
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  scene.add(ambientLight);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
   const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
   directionalLight.position.set(5, 10, 5);
   directionalLight.castShadow = true;
   scene.add(directionalLight);
 
-  const loader = new GLTFLoader();
-  loader.load(
-    "/models/refined_eagle.glb",
-    (gltf) => {
-      model = gltf.scene;
-      model.position.set(0, 1.3, -1);
-      scene.add(model);
-    },
-    undefined,
-    (error) => console.error("Error loading model:", error)
-  );
+  loadModel("/models/refined_eagle.glb");
 
   controller = renderer.xr.getController(0);
-  if (controller) {
-    controller.addEventListener("selectstart", onButtonPress);
-    controller.addEventListener("selectend", onButtonRelease);
-    scene.add(controller);
-  }
+  controller.addEventListener("selectstart", onButtonPress);
+  controller.addEventListener("selectend", onButtonRelease);
+  scene.add(controller);
 
   reticle = new THREE.Mesh(
-    new THREE.RingGeometry(0.02, 0.025, 32),
+    new THREE.RingGeometry(0.05, 0.08, 32),
     new THREE.MeshBasicMaterial({ color: 0xff0000 })
   );
   reticle.position.set(0, 0, -1);
@@ -70,12 +56,29 @@ function init() {
   window.addEventListener("resize", onWindowResize);
 }
 
+function loadModel(path) {
+  const loader = new GLTFLoader();
+  loader.load(
+    path,
+    (gltf) => {
+      model = gltf.scene;
+      model.position.set(0, 1.3, -1);
+      scene.add(model);
+    },
+    undefined,
+    (error) => console.error("Error loading model:", error)
+  );
+}
+
 function onButtonPress() {
   const now = performance.now();
   if (now - lastClickTime < 300) {
     placeModel();
+  } else {
+    rotateModel();
   }
   lastClickTime = now;
+  buttonPressed = true;
 }
 
 function placeModel() {
@@ -86,20 +89,42 @@ function placeModel() {
   model.lookAt(camera.position);
 }
 
+function rotateModel() {
+  if (!model || activeRotation) return;
+  const headDirectionX = getHeadDirectionX();
+  const headDirectionY = getHeadDirectionY();
+
+  if (Math.abs(headDirectionX) > 0.2) {
+    targetRotationY += Math.sign(headDirectionX) * (Math.PI / 2);
+    activeRotation = "horizontal";
+  } else if (Math.abs(headDirectionY) > 0.2) {
+    targetRotationX += Math.sign(headDirectionY) * (Math.PI / 2);
+    activeRotation = "vertical";
+  }
+}
+
 function onButtonRelease() {
   buttonPressed = false;
-  longPressActive = false;
   activeRotation = null;
+}
+
+function getHeadDirectionX() {
+  const direction = new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  return direction.x;
+}
+
+function getHeadDirectionY() {
+  const direction = new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  return direction.y;
 }
 
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
-      if (activeRotation === "horizontal") {
-        model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
-      } else if (activeRotation === "vertical") {
-        model.rotation.x += (targetRotationX - model.rotation.x) * 0.1;
-      }
+      model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
+      model.rotation.x += (targetRotationX - model.rotation.x) * 0.1;
     }
     renderer.render(scene, camera);
   });

@@ -7,7 +7,7 @@ let buttonPressed = false;
 let targetRotationY = 0;
 let targetRotationX = 0;
 let lastClickTime = 0;
-let activeRotation = null;
+let isPlacingModel = false; // Track if model was just placed
 
 init();
 animate();
@@ -83,29 +83,33 @@ function onButtonPress() {
 
 function placeModel() {
   if (!model) return;
+
+  // Move the model forward in the camera's direction
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
   model.position.copy(camera.position).add(direction.multiplyScalar(2));
-  model.lookAt(camera.position);
+
+  // Keep the model's original orientation after placement
+  isPlacingModel = true;
 }
 
 function rotateModel() {
-  if (!model || activeRotation) return;
+  if (!model) return;
+
   const headDirectionX = getHeadDirectionX();
   const headDirectionY = getHeadDirectionY();
 
   if (Math.abs(headDirectionX) > 0.2) {
     targetRotationY += Math.sign(headDirectionX) * (Math.PI / 2);
-    activeRotation = "horizontal";
-  } else if (Math.abs(headDirectionY) > 0.2) {
+  }
+  if (Math.abs(headDirectionY) > 0.2) {
     targetRotationX += Math.sign(headDirectionY) * (Math.PI / 2);
-    activeRotation = "vertical";
   }
 }
 
 function onButtonRelease() {
   buttonPressed = false;
-  activeRotation = null;
+  isPlacingModel = false;
 }
 
 function getHeadDirectionX() {
@@ -123,8 +127,11 @@ function getHeadDirectionY() {
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
-      model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
-      model.rotation.x += (targetRotationX - model.rotation.x) * 0.1;
+      if (!isPlacingModel) {
+        // Ensure rotation is applied smoothly
+        model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
+        model.rotation.x += (targetRotationX - model.rotation.x) * 0.1;
+      }
     }
     renderer.render(scene, camera);
   });
