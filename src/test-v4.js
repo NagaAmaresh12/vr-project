@@ -20,7 +20,7 @@ function init() {
   setupController();
   setupReticle();
   window.addEventListener("resize", onWindowResize);
-  window.addEventListener("dblclick", resetModelPosition); // 🔹 Listen for double-clicks
+  window.addEventListener("dblclick", resetModelPosition);
 }
 
 function setupScene() {
@@ -98,40 +98,36 @@ function onButtonPress() {
 
 function placeModel() {
   if (!model) return;
-
-  // Move the model forward in the camera's direction
-  const forward = new THREE.Vector3(0, 0, -1); // Always forward in local space
-  forward.applyQuaternion(camera.quaternion); // Adjust for camera rotation
-
-  model.position.copy(camera.position).add(forward.multiplyScalar(2)); // Move forward
-  model.lookAt(camera.position); // Face user
-  model.rotation.set(0, 0, 0); // Reset rotation
-
-  // Reset rotation tracking
+  const forward = new THREE.Vector3(0, 0, -1);
+  forward.applyQuaternion(camera.quaternion);
+  model.position.copy(camera.position).add(forward.multiplyScalar(2));
+  model.lookAt(camera.position);
+  model.rotation.set(0, 0, 0);
   isPlacingModel = true;
   activeRotation = null;
 }
 
-// 🔹 New function: Reset model to be centered in front on double-click
 function resetModelPosition() {
   if (!model) return;
-  placeModel(); // Just re-use the placeModel function
+  placeModel();
 }
 
 function determineRotation() {
   if (!model || isPlacingModel) return;
 
-  const headDirection = getHeadDirection();
+  const cameraQuaternion = camera.quaternion;
+  const euler = new THREE.Euler();
+  euler.setFromQuaternion(cameraQuaternion, "YXZ");
 
-  // Determine rotation only if there's no active rotation
+  const yaw = euler.y;
+  const pitch = euler.x;
+
   if (!activeRotation) {
-    if (Math.abs(headDirection.x) > Math.abs(headDirection.y)) {
-      // Rotate left/right
-      targetRotation.y += Math.sign(headDirection.x) * (Math.PI / 2);
+    if (Math.abs(yaw) > Math.abs(pitch)) {
+      targetRotation.y += Math.sign(yaw) * (Math.PI / 2);
       activeRotation = "horizontal";
     } else {
-      // Rotate up/down
-      targetRotation.x += Math.sign(headDirection.y) * (Math.PI / 2);
+      targetRotation.x += Math.sign(pitch) * (Math.PI / 2);
       activeRotation = "vertical";
     }
   }
@@ -142,22 +138,12 @@ function onButtonRelease() {
   isPlacingModel = false;
 }
 
-function getHeadDirection() {
-  const direction = new THREE.Vector3();
-  camera.getWorldDirection(direction);
-  return { x: direction.x, y: direction.y };
-}
-
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
       if (!isPlacingModel) {
-        // Apply rotation smoothly
-        if (activeRotation === "horizontal") {
-          model.rotation.y += (targetRotation.y - model.rotation.y) * 0.1;
-        } else if (activeRotation === "vertical") {
-          model.rotation.x += (targetRotation.x - model.rotation.x) * 0.1;
-        }
+        model.rotation.y += (targetRotation.y - model.rotation.y) * 0.1;
+        model.rotation.x += (targetRotation.x - model.rotation.x) * 0.1;
       }
     }
     renderer.render(scene, camera);
