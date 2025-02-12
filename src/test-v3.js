@@ -3,11 +3,11 @@ import { VRButton } from "three/addons/webxr/VRButton.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 let scene, camera, renderer, controller, model, reticle;
-let arrows = {};
 let lastClickTime = 0;
 let isPlacingModel = false;
-let activeRotation = null;
-let targetRotation = { x: 0, y: 0 };
+let initialRotation = new THREE.Euler();
+let targetRotation = new THREE.Euler();
+let rotationSpeed = 0.1;
 
 init();
 animate();
@@ -20,7 +20,6 @@ function init() {
   loadModel("/models/refined_eagle.glb");
   setupController();
   setupReticle();
-  setupArrows();
   window.addEventListener("resize", onWindowResize);
 }
 
@@ -62,6 +61,8 @@ function loadModel(path) {
     (gltf) => {
       model = gltf.scene;
       model.position.set(0, 1.3, -1);
+      initialRotation.copy(model.rotation);
+      targetRotation.copy(initialRotation);
       scene.add(model);
     },
     undefined,
@@ -72,7 +73,6 @@ function loadModel(path) {
 function setupController() {
   controller = renderer.xr.getController(0);
   controller.addEventListener("selectstart", onButtonPress);
-  controller.addEventListener("selectend", onButtonRelease);
   scene.add(controller);
 }
 
@@ -87,82 +87,33 @@ function setupReticle() {
   scene.add(camera);
 }
 
-function setupArrows() {
-  const arrowPositions = {
-    up: { x: 0, y: 0.2, z: -0.5 },
-    down: { x: 0, y: -0.2, z: -0.5 },
-    left: { x: -0.2, y: 0, z: -0.5 },
-    right: { x: 0.2, y: 0, z: -0.5 },
-    center: { x: 0, y: 0, z: -0.5 },
-  };
-
-  Object.keys(arrowPositions).forEach((dir) => {
-    const arrow = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.1, 0.1),
-      new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.5,
-      })
-    );
-    arrow.position.set(
-      arrowPositions[dir].x,
-      arrowPositions[dir].y,
-      arrowPositions[dir].z
-    );
-    scene.add(arrow);
-    arrows[dir] = arrow;
-  });
-}
-
-function updateArrowOpacity(direction) {
-  Object.keys(arrows).forEach((dir) => {
-    arrows[dir].material.opacity = dir === direction ? 1.0 : 0.5;
-  });
-}
-
 function onButtonPress() {
   const now = performance.now();
   if (now - lastClickTime < 300) {
     placeModel();
   } else {
-    determineRotation();
+    rotateModel();
   }
   lastClickTime = now;
 }
 
 function placeModel() {
   if (!model) return;
-
   const direction = new THREE.Vector3();
   camera.getWorldDirection(direction);
   model.position.copy(camera.position).add(direction.multiplyScalar(2));
-
-  isPlacingModel = true;
-  activeRotation = null;
+  model.rotation.copy(initialRotation);
+  targetRotation.copy(initialRotation);
 }
 
-function determineRotation() {
-  if (!model || isPlacingModel) return;
-
+function rotateModel() {
+  if (!model) return;
   const headDirection = getHeadDirection();
-
-  if (!activeRotation) {
-    if (Math.abs(headDirection.x) > Math.abs(headDirection.y)) {
-      targetRotation.y += Math.sign(headDirection.x) * (Math.PI / 2);
-      activeRotation = "horizontal";
-      updateArrowOpacity(headDirection.x > 0 ? "right" : "left");
-    } else {
-      targetRotation.x += Math.sign(headDirection.y) * (Math.PI / 2);
-      activeRotation = "vertical";
-      updateArrowOpacity(headDirection.y > 0 ? "up" : "down");
-    }
+  if (Math.abs(headDirection.x) > Math.abs(headDirection.y)) {
+    targetRotation.y += Math.sign(headDirection.x) * (Math.PI / 2);
+  } else {
+    targetRotation.x += Math.sign(headDirection.y) * (Math.PI / 2);
   }
-}
-
-function onButtonRelease() {
-  activeRotation = null;
-  isPlacingModel = false;
 }
 
 function getHeadDirection() {
@@ -174,15 +125,9 @@ function getHeadDirection() {
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
-      if (!isPlacingModel) {
-        if (activeRotation === "horizontal") {
-          model.rotation.y += (targetRotation.y - model.rotation.y) * 0.1;
-        } else if (activeRotation === "vertical") {
-          model.rotation.x += (targetRotation.x - model.rotation.x) * 0.1;
-        }
-      }
+      model.rotation.x += (targetRotation.x - model.rotation.x) * rotationSpeed;
+      model.rotation.y += (targetRotation.y - model.rotation.y) * rotationSpeed;
     }
-    updateArrowOpacity("center");
     renderer.render(scene, camera);
   });
 }
