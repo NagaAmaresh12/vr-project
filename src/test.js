@@ -30,25 +30,14 @@ function init() {
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(VRButton.createButton(renderer));
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  scene.add(ambientLight);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
   const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
   directionalLight.position.set(5, 10, 5);
   directionalLight.castShadow = true;
   scene.add(directionalLight);
 
-  const loader = new GLTFLoader();
-  loader.load(
-    "/models/refined_eagle.glb",
-    (gltf) => {
-      model = gltf.scene;
-      model.position.set(0, 1.3, -1);
-      scene.add(model);
-    },
-    undefined,
-    (error) => console.error("Error loading model:", error)
-  );
+  loadModel("/models/refined_eagle.glb");
 
   controller = renderer.xr.getController(0);
   controller.addEventListener("selectstart", onButtonPress);
@@ -56,7 +45,7 @@ function init() {
   scene.add(controller);
 
   reticle = new THREE.Mesh(
-    new THREE.RingGeometry(0.05, 0.08, 32), // Increased size
+    new THREE.RingGeometry(0.05, 0.08, 32),
     new THREE.MeshBasicMaterial({ color: 0xff0000 })
   );
   reticle.position.set(0, 0, -1);
@@ -65,6 +54,20 @@ function init() {
   scene.add(camera);
 
   window.addEventListener("resize", onWindowResize);
+}
+
+function loadModel(path) {
+  const loader = new GLTFLoader();
+  loader.load(
+    path,
+    (gltf) => {
+      model = gltf.scene;
+      model.position.set(0, 1.3, -1);
+      scene.add(model);
+    },
+    undefined,
+    (error) => console.error("Error loading model:", error)
+  );
 }
 
 function onButtonPress() {
@@ -76,23 +79,6 @@ function onButtonPress() {
   }
   lastClickTime = now;
   buttonPressed = true;
-  buttonPressed = true;
-  const headDirectionX = getHeadDirectionX(); // Left-right movement
-  const headDirectionY = getHeadDirectionY(); // Up-down movement
-
-  if (Math.abs(headDirectionX) > 0.2 && !activeRotation) {
-    // If moving left/right and no active rotation, set horizontal rotation
-    targetRotationY += Math.sign(headDirectionX) * (Math.PI / 2);
-    activeRotation = "horizontal";
-    longPressActive = false;
-  } else if (Math.abs(headDirectionY) > 0.2 && !activeRotation) {
-    // If moving up/down and no active rotation, set vertical rotation
-    targetRotationX += Math.sign(headDirectionY) * (Math.PI / 2);
-    activeRotation = "vertical";
-    longPressActive = false;
-  } else {
-    longPressActive = true;
-  }
 }
 
 function placeModel() {
@@ -137,11 +123,8 @@ function getHeadDirectionY() {
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
-      if (activeRotation === "horizontal") {
-        model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
-      } else if (activeRotation === "vertical") {
-        model.rotation.x += (targetRotationX - model.rotation.x) * 0.1;
-      }
+      model.rotation.y += (targetRotationY - model.rotation.y) * 0.1;
+      model.rotation.x += (targetRotationX - model.rotation.x) * 0.1;
     }
     renderer.render(scene, camera);
   });

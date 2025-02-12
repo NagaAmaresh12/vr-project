@@ -76,23 +76,6 @@ function onButtonPress() {
   }
   lastClickTime = now;
   buttonPressed = true;
-  buttonPressed = true;
-  const headDirectionX = getHeadDirectionX(); // Left-right movement
-  const headDirectionY = getHeadDirectionY(); // Up-down movement
-
-  if (Math.abs(headDirectionX) > 0.2 && !activeRotation) {
-    // If moving left/right and no active rotation, set horizontal rotation
-    targetRotationY += Math.sign(headDirectionX) * (Math.PI / 2);
-    activeRotation = "horizontal";
-    longPressActive = false;
-  } else if (Math.abs(headDirectionY) > 0.2 && !activeRotation) {
-    // If moving up/down and no active rotation, set vertical rotation
-    targetRotationX += Math.sign(headDirectionY) * (Math.PI / 2);
-    activeRotation = "vertical";
-    longPressActive = false;
-  } else {
-    longPressActive = true;
-  }
 }
 
 function placeModel() {
