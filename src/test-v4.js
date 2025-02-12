@@ -123,13 +123,9 @@ function determineRotation() {
   const pitch = euler.x;
 
   if (!activeRotation) {
-    if (Math.abs(yaw) > Math.abs(pitch)) {
-      targetRotation.y += Math.sign(yaw) * (Math.PI / 2);
-      activeRotation = "horizontal";
-    } else {
-      targetRotation.x += Math.sign(pitch) * (Math.PI / 2);
-      activeRotation = "vertical";
-    }
+    targetRotation.y += Math.sign(yaw) * (Math.PI / 4); // Adjust rotation smoothly
+    targetRotation.x += Math.sign(pitch) * (Math.PI / 4);
+    activeRotation = "rotating";
   }
 }
 
@@ -142,8 +138,8 @@ function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
       if (!isPlacingModel) {
-        model.rotation.y += (targetRotation.y - model.rotation.y) * 0.1;
-        model.rotation.x += (targetRotation.x - model.rotation.x) * 0.1;
+        model.rotation.y += (targetRotation.y - model.rotation.y) * 0.15;
+        model.rotation.x += (targetRotation.x - model.rotation.x) * 0.15;
       }
     }
     renderer.render(scene, camera);
