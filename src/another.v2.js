@@ -7,9 +7,10 @@ let buttonPressed = false;
 let currentRotationY = 0;
 let currentRotationX = 0;
 const rotationStep = Math.PI / 2; // 90 degrees
-const rotationSpeed = 0.1; // Adjust for smoother animation
-
-let targetQuaternion = new THREE.Quaternion(); // Target rotation
+let rotationProgress = 0;
+const easing = (t) => t * t * (3 - 2 * t); // Cubic Bezier-like ease function
+let targetRotationY = 0;
+let targetRotationX = 0;
 
 init();
 animate();
@@ -45,7 +46,6 @@ function init() {
       model = gltf.scene;
       model.position.set(0, 1.3, -1);
       scene.add(model);
-      targetQuaternion.copy(model.quaternion); // Set initial rotation
       addInstructionPanels();
     },
     undefined,
@@ -62,52 +62,6 @@ function init() {
   window.addEventListener("resize", onWindowResize);
 }
 
-function addInstructionPanels() {
-  const instructions = [
-    { text: "Look Left and Click", position: [-1.5, 1.3, -1], color: 0xff0000 },
-    { text: "Look Right and Click", position: [1.5, 1.3, -1], color: 0x00ff00 },
-    { text: "Look Up and Click", position: [0, 2, -1], color: 0x0000ff },
-    { text: "Look Down and Click", position: [0, 0.5, -1], color: 0xffff00 },
-  ];
-
-  instructions.forEach(({ text, position, color }) => {
-    const panelGeometry = new THREE.PlaneGeometry(0.9, 0.5);
-    const panelMaterial = new THREE.MeshBasicMaterial({
-      color,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.2,
-    });
-
-    const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-    panel.position.set(...position);
-    scene.add(panel);
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = 512;
-    canvas.height = 256;
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "black";
-    ctx.font = "Bold 40px Arial";
-    ctx.fillText(text, 20, 130);
-    const texture = new THREE.CanvasTexture(canvas);
-    const textMaterial = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-    });
-
-    const textMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.8, 0.4),
-      textMaterial
-    );
-    textMesh.position.set(...position);
-    textMesh.position.z += 0.01;
-    scene.add(textMesh);
-  });
-}
-
 function onButtonPress() {
   buttonPressed = true;
   updateRotationTarget();
@@ -116,6 +70,7 @@ function onButtonPress() {
 function onButtonRelease() {
   buttonPressed = false;
 }
+
 function updateRotationTarget() {
   if (!model) return;
 
@@ -123,19 +78,29 @@ function updateRotationTarget() {
   camera.getWorldDirection(lookDirection);
 
   if (Math.abs(lookDirection.x) > Math.abs(lookDirection.y)) {
-    // Left/Right rotation
-    currentRotationY += lookDirection.x > 0 ? -rotationStep : rotationStep;
+    targetRotationY += lookDirection.x > 0 ? -rotationStep : rotationStep;
   } else {
-    // Up/Down rotation
-    currentRotationX += lookDirection.y > 0 ? rotationStep : -rotationStep;
+    targetRotationX += lookDirection.y > 0 ? rotationStep : -rotationStep;
   }
+  rotationProgress = 0;
 }
 
 function animate() {
   renderer.setAnimationLoop(() => {
     if (model) {
-      model.rotation.y = currentRotationY;
-      model.rotation.x = currentRotationX;
+      if (rotationProgress < 1) {
+        rotationProgress += 0.02; // Adjust speed
+        let easedProgress = easing(rotationProgress);
+        model.rotation.y =
+          currentRotationY +
+          easedProgress * (targetRotationY - currentRotationY);
+        model.rotation.x =
+          currentRotationX +
+          easedProgress * (targetRotationX - currentRotationX);
+      } else {
+        currentRotationY = targetRotationY;
+        currentRotationX = targetRotationX;
+      }
     }
     renderer.render(scene, camera);
   });
