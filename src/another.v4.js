@@ -64,26 +64,45 @@ function init() {
 
 function addInstructionPanels() {
   const panelData = [
-    { text: "Look left and click", position: new THREE.Vector3(-1.5, 1.3, -1) },
-    { text: "Look right and click", position: new THREE.Vector3(1.5, 1.3, -1) },
-    { text: "Look top and click", position: new THREE.Vector3(0, 2.5, -1) },
-    { text: "Look bottom and click", position: new THREE.Vector3(0, 0.5, -1) },
+    {
+      text: "Look left and click",
+      position: new THREE.Vector3(-1.5, 1.3, -1),
+      borderColor: "red",
+    },
+    {
+      text: "Look right and click",
+      position: new THREE.Vector3(1.5, 1.3, -1),
+      borderColor: "blue",
+    },
+    {
+      text: "Look top and click",
+      position: new THREE.Vector3(0, 2.5, -1),
+      borderColor: "green",
+    },
+    {
+      text: "Look bottom and click",
+      position: new THREE.Vector3(0, 0.5, -1),
+      borderColor: "yellow",
+    },
   ];
 
-  panelData.forEach(({ text, position }) => {
-    const textPanel = createTextPanel(text);
+  panelData.forEach(({ text, position, borderColor }) => {
+    const textPanel = createTextPanel(text, borderColor);
     textPanel.position.copy(position);
     scene.add(textPanel);
   });
 }
 
-function createTextPanel(text) {
+function createTextPanel(text, borderColor) {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   canvas.width = 256;
   canvas.height = 128;
   context.fillStyle = "transparent";
   context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = borderColor;
+  context.lineWidth = 5;
+  context.strokeRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = "white";
   context.font = "24px Arial";
   context.fillText(text, 20, 64);
