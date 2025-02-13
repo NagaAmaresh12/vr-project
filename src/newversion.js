@@ -6,7 +6,8 @@ let scene, camera, renderer, controller, model;
 let buttonPressed = false;
 let targetRotationY = 0;
 let targetRotationX = 0;
-let rotationSpeed = 0.02;
+const rotationSpeed = 0.02;
+const maxRotation = Math.PI / 2; // 90 degrees
 
 init();
 animate();
@@ -42,7 +43,6 @@ function init() {
       model = gltf.scene;
       model.position.set(0, 1.3, -1);
       scene.add(model);
-      addInstructionPanels();
     },
     undefined,
     (error) => console.error("Error loading model:", error)
@@ -58,81 +58,36 @@ function init() {
   window.addEventListener("resize", onWindowResize);
 }
 
-function addInstructionPanels() {
-  const instructions = [
-    { text: "Look up and click button", position: [0, 2, -1], color: 0xff0000 },
-    {
-      text: "Look down and click button",
-      position: [0, 0.5, -1],
-      color: 0x00ff00,
-    },
-    {
-      text: "Look left and click button",
-      position: [-1.5, 1.3, -1],
-      color: 0x0000ff,
-    },
-    {
-      text: "Look right and click button",
-      position: [1.5, 1.3, -1],
-      color: 0xffff00,
-    },
-  ];
-
-  instructions.forEach(({ text, position, color }) => {
-    const panelGeometry = new THREE.PlaneGeometry(0.9, 0.5);
-    const panelMaterial = new THREE.MeshBasicMaterial({
-      color,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.2,
-    });
-
-    const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-    panel.position.set(...position);
-    scene.add(panel);
-
-    const borderMaterial = new THREE.LineBasicMaterial({ color, linewidth: 5 });
-    const borderGeometry = new THREE.EdgesGeometry(panelGeometry);
-    const border = new THREE.LineSegments(borderGeometry, borderMaterial);
-    panel.add(border);
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = 512;
-    canvas.height = 256;
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "black";
-    ctx.font = "Bold 40px Arial";
-    ctx.fillText(text, 20, 130);
-    const texture = new THREE.CanvasTexture(canvas);
-    const textMaterial = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-    });
-
-    const textMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.8, 0.4),
-      textMaterial
-    );
-    textMesh.position.set(...position);
-    textMesh.position.z += 0.01;
-    scene.add(textMesh);
-  });
-}
-
 function onButtonPress() {
   buttonPressed = true;
+  updateRotationTarget();
 }
 
 function onButtonRelease() {
   buttonPressed = false;
 }
 
+function updateRotationTarget() {
+  const lookDirection = new THREE.Vector3();
+  camera.getWorldDirection(lookDirection);
+
+  if (Math.abs(lookDirection.x) > Math.abs(lookDirection.y)) {
+    // Left/Right rotation
+    targetRotationY = lookDirection.x > 0 ? -maxRotation : maxRotation;
+    targetRotationX = 0; // Ensure no vertical movement
+  } else {
+    // Up/Down rotation
+    targetRotationX = lookDirection.y > 0 ? maxRotation : -maxRotation;
+    targetRotationY = 0; // Ensure no horizontal movement
+  }
+}
+
 function animate() {
   renderer.setAnimationLoop(() => {
-    if (model && buttonPressed) {
-      model.rotation.y += rotationSpeed;
+    if (model) {
+      // Smoothly rotate towards target
+      model.rotation.y += (targetRotationY - model.rotation.y) * rotationSpeed;
+      model.rotation.x += (targetRotationX - model.rotation.x) * rotationSpeed;
     }
 
     renderer.render(scene, camera);
