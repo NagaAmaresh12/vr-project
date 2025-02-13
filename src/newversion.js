@@ -4,10 +4,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 let scene, camera, renderer, controller, model;
 let buttonPressed = false;
-let targetRotationY = 0; // Left-right rotation
-let targetRotationX = 0; // Up-down rotation
-let longPressActive = false;
-let activeRotation = null; // Track active rotation direction ('horizontal' or 'vertical')
+let targetRotationY = 0;
+let targetRotationX = 0;
+let rotationSpeed = 0.02;
 
 init();
 animate();
@@ -132,6 +131,10 @@ function onButtonRelease() {
 
 function animate() {
   renderer.setAnimationLoop(() => {
+    if (model && buttonPressed) {
+      model.rotation.y += rotationSpeed;
+    }
+
     renderer.render(scene, camera);
   });
 }
