@@ -61,7 +61,11 @@ function init() {
 
 function addInstructionPanels() {
   const instructions = [
-    { text: "Look Left and Click", position: [-1.5, 1.3, -1], color: 0xff0000 },
+    {
+      text: "Look Left and Click",
+      position: [-1.5, 1.3, -1],
+      color: 0xff0000,
+    },
     { text: "Look Right and Click", position: [1.5, 1.3, -1], color: 0x00ff00 },
     { text: "Look Up and Click", position: [0, 2, -1], color: 0x0000ff },
     { text: "Look Down and Click", position: [0, 0.5, -1], color: 0xffff00 },
